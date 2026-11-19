@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gradium-dictation"
+version = "0.1.0"
+description = "Open-source push-to-talk dictation on Gradium speech-to-text: hold a key, speak, and the words land in any app."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+  "gradium",
+  "numpy",
+  "sounddevice",
+  "pynput",
+  "pyperclip",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+dictate = "dictate.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dictate"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
