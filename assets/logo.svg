@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="240" height="240" role="img" aria-label="gradium-dictation: a voice, as columns of dots, arriving at a text cursor">
+  <rect x="1" y="1" width="118" height="118" rx="28" fill="#000000" stroke="#37383a" stroke-width="2"/>
+  <circle cx="22" cy="53.25" r="4.5" fill="#91fffa"/>
+  <circle cx="22" cy="66.75" r="4.5" fill="#91fffa"/>
+  <circle cx="35.5" cy="39.75" r="4.5" fill="#91fffa"/>
+  <circle cx="35.5" cy="53.25" r="4.5" fill="#91fffa"/>
+  <circle cx="35.5" cy="66.75" r="4.5" fill="#91fffa"/>
+  <circle cx="35.5" cy="80.25" r="4.5" fill="#91fffa"/>
+  <circle cx="49" cy="46.5" r="4.5" fill="#daff52"/>
+  <circle cx="49" cy="60" r="4.5" fill="#daff52"/>
+  <circle cx="49" cy="73.5" r="4.5" fill="#daff52"/>
+  <circle cx="62.5" cy="33" r="4.5" fill="#daff52"/>
+  <circle cx="62.5" cy="46.5" r="4.5" fill="#daff52"/>
+  <circle cx="62.5" cy="60" r="4.5" fill="#daff52"/>
+  <circle cx="62.5" cy="73.5" r="4.5" fill="#daff52"/>
+  <circle cx="62.5" cy="87" r="4.5" fill="#daff52"/>
+  <circle cx="76" cy="53.25" r="4.5" fill="#daff52"/>
+  <circle cx="76" cy="66.75" r="4.5" fill="#daff52"/>
+  <rect x="91" y="24" width="9" height="72" rx="4.5" fill="#f2f2f2"/>
+</svg>

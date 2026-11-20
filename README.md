@@ -1,16 +1,19 @@
+<img src="assets/logo.svg" alt="" width="96" align="right">
+
 # gradium-dictation
 
 Hold a key, speak, release: your words land in whatever app you're in. It's an
 open-source, push-to-talk dictation tool on
 [Gradium](https://gradium.ai) speech-to-text, in the spirit of Wispr Flow.
 
-> **Status: first draft.** The unit tests pass. It has not yet been run
-> against a live Gradium key or a real microphone. See "Before the demo".
+> **Status: first draft.** Two parts: the desktop tool in `desktop/` (its unit
+> tests pass; it has not yet been run against a live Gradium key or a real
+> microphone, see "Before the demo") and a web demo at the repository's root.
 
 ## Try it
 
 ```bash
-pipx install git+https://github.com/patrickscoleman/gradium-dictation   # or: uv tool install …
+pipx install "git+https://github.com/patrickscoleman/gradium-dictation#subdirectory=desktop"   # or: uv tool install …
 export GRADIUM_API_KEY=gd_...       # free key at https://gradium.ai
 dictate listen                      # hold right Option, speak, release
 ```
@@ -30,12 +33,47 @@ terminal (or the installed app) under System Settings › Privacy & Security ›
 Languages: English, French, German, Spanish and Portuguese, the five Gradium
 speech-to-text supports.
 
-## How it works
+## Web demo
+
+The repository's root is the same idea in a browser, for trying it without
+installing anything: press the button, speak, and read the text. It is a
+static page (`public/`) and two small functions (`api/`, `lib/`), which
+Vercel deploys as they are on every push to `main`.
+
+- **Run it here:** `GRADIUM_API_KEY=gd_... node dev.mjs`, then open
+  http://127.0.0.1:4173. Leave the key out and paste one into the page instead.
+  `node --test` runs its tests.
+- **The key stays on the server.** The page records a clip of up to 30 seconds
+  as 16 kHz WAV and posts it to `/api/transcribe`, which calls Gradium's REST
+  speech-to-text and streams the words back. A visitor can paste their own
+  key instead: it is passed to Gradium for that request and kept nowhere.
+- **What the shared key can spend.** Gradium bills speech-to-text at 3 credits
+  a second. The shared key gives everybody together 30 minutes a day (5,400
+  credits: about 29 cents at the XS plan's own rate, 38 cents at its top-up
+  rate), one address 5 minutes a day and 8 clips in 10 minutes. Past that
+  the page says "Demo paused for today". It also stops whenever the account
+  has fewer than 120,000 credits left, by Gradium's own count, so a lost
+  counter cannot run the account down. The numbers are in `lib/config.js`.
+- **Where the counts live:** Vercel's Runtime Cache, in the one region the
+  functions run in (Paris). Nothing to set up. An address is kept only as a
+  hash salted with the day.
+- **What it keeps:** no audio, no text, no cookies. Every page is `noindex`.
+
+To deploy: import this repository in Vercel with its default settings and
+add `GRADIUM_API_KEY` as a Production environment variable (`vercel.json`
+says the rest). Without the key the page still works for anyone who pastes
+their own.
+
+This is a demo by Patrick Coleman, not a Gradium product.
+
+## How the desktop tool works
 
 ```
 hold key ─▶ mic, 24 kHz PCM, 80 ms chunks ─▶ Gradium STT stream
 release  ─▶ end of audio ─▶ last words flushed ─▶ tidy text ─▶ paste into the focused app
 ```
+
+The code is in `desktop/src/dictate/`.
 
 - `audio.py` streams the microphone while the key is held.
 - `transcribe.py` sends it to Gradium's realtime STT. The text streams back
@@ -67,6 +105,14 @@ latency.
 - **A menu bar app**, with a sound and a level meter while recording, and a
   signed macOS build.
 - **Streaming insert**, typing text live as it arrives.
+- **Live text in the web demo**, over Gradium's WebSocket with short-lived
+  tokens, for visitors on their own key.
+
+## The mark
+
+`assets/logo.svg`: a voice, as columns of dots, arriving at a text cursor.
+Original artwork for this project, under the same licence. It is not a
+Gradium logo, and this is not a Gradium product.
 
 ## License
 

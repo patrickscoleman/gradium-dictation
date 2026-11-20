@@ -6,3 +6,5 @@ dist/
 build/
 *.egg-info/
 .env
+node_modules/
+.vercel/

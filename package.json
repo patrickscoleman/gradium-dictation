@@ -1,0 +1,16 @@
+{
+  "name": "gradium-dictation",
+  "private": true,
+  "type": "module",
+  "description": "gradium-dictation: the web demo at the root (a static page and two small functions), the desktop tool in desktop/.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@vercel/functions": "3.11.3"
+  }
+}
