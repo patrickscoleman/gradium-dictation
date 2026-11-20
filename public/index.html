@@ -32,11 +32,17 @@
     <main id="top">
       <section class="hero">
         <p class="label">Open-source dictation</p>
-        <h1>The <mark>fastest</mark> keyboard is your voice.<span class="grey">Hold, speak, read it back as text.</span></h1>
-        <p class="lede">People talk about three times faster than they type. This is the smallest tool that lets you: press, say it, and the words are on the page.</p>
+        <h1>The <mark>fastest</mark> keyboard is your voice.<span class="grey">Hold, speak, and watch it type.</span></h1>
+        <p class="lede">People talk about three times faster than they type. Hold the button and the words appear while you are still speaking, streamed from Gradium’s speech-to-text.</p>
       </section>
 
       <section id="try" class="stage" aria-label="Try it">
+        <p class="embed-bar">
+          <img src="/logo.svg" width="30" height="30" alt="" />
+          <span class="embed-name"><span class="grey">gradium-</span>dictation</span>
+          <span class="label">Live · by Patrick Coleman</span>
+          <a href="/" target="_blank" rel="noopener">Open full screen ↗</a>
+        </p>
         <div class="notes">
           <div class="bar">
             <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
@@ -47,8 +53,14 @@
             </span>
           </div>
           <div id="text" class="text" aria-live="polite">
-            <p id="hint" class="hint">Hold the button and say something. Your words land here.</p>
+            <p id="hint" class="hint">Hold the button and start talking. Your words land here while you speak.</p>
           </div>
+        </div>
+
+        <div class="chips" aria-label="How fast the last press was">
+          <span id="first" class="chip"><i>First word</i><b>—</b></span>
+          <span id="last" class="chip"><i>Last word<span class="long">, after release</span></i><b>—</b></span>
+          <span class="chip set"><i>Gradium delay</i><b>7 frames · 0.56 s</b></span>
         </div>
 
         <div class="controls">
@@ -75,7 +87,7 @@
             <span class="label">Tidy up</span>
           </label>
         </div>
-        <p class="how">Hold the button, or hold <kbd>Space</kbd>, while you speak. Or tap once to start and again to stop. Up to 30 seconds a clip.</p>
+        <p class="how">Hold the button, or hold <kbd>Space</kbd>, while you speak. Or tap once to start and again to stop. Up to 30 seconds a press. Words arrive light and settle when Gradium is sure of them.</p>
         <p id="status" class="status" role="status"></p>
       </section>
 
@@ -107,12 +119,12 @@
           <article>
             <p class="step">02</p>
             <h3>Speak</h3>
-            <p>Say it the way you would say it to a person. English, French, German, Spanish or Portuguese.</p>
+            <p>Say it the way you would to a person. Each word shows up about half a second behind your voice, in five languages.</p>
           </article>
           <article>
             <p class="step">03</p>
             <h3>Read</h3>
-            <p>Let go. Gradium turns the clip into text, the tidy-up takes out the ums, and it is ready to copy.</p>
+            <p>The words are already there. Let go, the last ones land, the tidy-up takes out the ums, and it is ready to copy.</p>
           </article>
         </div>
       </section>

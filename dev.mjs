@@ -8,7 +8,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handleStatus, handleTranscribe } from './lib/handlers.js';
 import { memoryCache } from './lib/limits.js';
-import { gradiumSocket, liveRequest, relay } from './lib/live.js';
+import { GRADIUM, gradiumSocket, liveRequest, relay } from './lib/live.js';
 import { WebSocket, WebSocketServer } from 'ws';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -38,12 +38,20 @@ const server = createServer(async (req, res) => {
   }
 });
 
+// Behind a proxy (an agent's sandbox, say) `ws` cannot reach Gradium, and Node's own WebSocket can:
+// the same socket, given the three calls the relay uses.
+const proxied = (key) => {
+  const socket = new globalThis.WebSocket(GRADIUM, { headers: { 'x-api-key': key } });
+  return { get readyState() { return socket.readyState; }, send: (data) => socket.send(data), close: () => socket.close(), on: (type, heard) => socket.addEventListener(type, (event) => heard(type === 'message' ? event.data : event)) };
+};
+const connect = process.env.HTTPS_PROXY || process.env.https_proxy ? proxied : gradiumSocket(WebSocket);
+
 // The live relay, as /api/live does it on Vercel.
 const sockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 server.on('upgrade', (req, socket, head) => {
   const asked = liveRequest(new Request(new URL(req.url, `http://${req.headers.host}`), { headers: req.headers }));
   if (!req.url.startsWith('/api/live') || asked.refuse) return socket.destroy();
-  sockets.handleUpgrade(req, socket, head, (ws) => relay(ws, { language: asked.language, address: asked.address, cache, connect: gradiumSocket(WebSocket) }));
+  sockets.handleUpgrade(req, socket, head, (ws) => relay(ws, { language: asked.language, address: asked.address, cache, connect }));
 });
 
 server.listen(port, '127.0.0.1', () => console.log(`gradium-dictation demo on http://127.0.0.1:${port}`));

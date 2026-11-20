@@ -1,5 +1,6 @@
-// gradium-dictation, the web demo: record a clip, send it, read the words
-// as they come back. Nothing is kept: no storage, no cookies.
+// gradium-dictation, the web demo: hold the button, speak, and watch the
+// words arrive while you are still talking. Nothing is kept: no storage,
+// no cookies.
 import { cloud } from './cloud.js';
 import { tidy, wordCount } from './tidy.js';
 
@@ -8,6 +9,8 @@ const RATE = 16_000;
 const HOLD_MS = 400;
 const COLUMNS = 14;
 const DOTS = 5;
+/** What an average typist manages: Dhakal et al., CHI 2018, 168,000 volunteers. */
+const TYPING_WPM = 52;
 
 const $ = (id) => document.getElementById(id);
 const talk = $('talk');
@@ -20,20 +23,25 @@ const lang = $('lang');
 const keyField = $('key');
 const tidyOn = $('tidy-on');
 const dots = cloud($('cloud'));
-/** What an average typist manages: Dhakal et al., CHI 2018, 168,000 volunteers. */
-const TYPING_WPM = 52;
+const embedded = new URLSearchParams(location.search).has('embed');
+document.documentElement.classList.toggle('embed', embedded);
+const OWN_KEY_HINT = embedded ? 'Open it full screen and add your own Gradium key' : 'Add your own Gradium key below';
 
 /** 'idle' | 'starting' | 'recording' | 'sending' */
 let state = 'idle';
 let context;
 let stream;
 let node;
-let batches = [];
+let resample;
+let pcm = [];
 let startedAt = 0;
 let latched = false;
 let releasedEarly = false;
 let ticker;
 let levels = new Array(COLUMNS).fill(0);
+/** The press in flight: its socket, its line on the page, and its clock. */
+let press = null;
+let paused = false;
 
 /* ---------- the meter: the mark's columns of dots, moving ---------- */
 
@@ -63,6 +71,8 @@ function hear(batch) {
   levels = [...levels.slice(1), level];
   drawMeter();
   dots.hear(level / DOTS);
+  // The moment the visitor's voice is first heard, for the first-word clock.
+  if (press && !press.spokeAt && level >= 2) press.spokeAt = performance.now();
 }
 drawMeter();
 
@@ -73,37 +83,79 @@ function say(message, warn = false) {
   status.classList.toggle('warn', warn);
 }
 
+function chip(id, value) {
+  const el = $(id);
+  el.querySelector('b').textContent = value;
+  el.classList.toggle('set', value !== '—');
+}
+
 function show() {
-  talk.setAttribute('aria-pressed', String(state === 'recording'));
-  talk.disabled = state === 'sending';
-  label.textContent = state === 'recording' ? (latched ? 'Tap to stop' : 'Listening') : state === 'sending' ? 'Transcribing' : state === 'starting' ? 'Starting' : 'Hold to talk';
-  if (state !== 'recording') clock.textContent = `0:${String(CLIP_SECONDS).padStart(2, '0')}`;
+  const on = state === 'recording';
+  talk.setAttribute('aria-pressed', String(on));
+  talk.disabled = state === 'sending' || (paused && !keyField.value.trim());
+  document.documentElement.classList.toggle('listening', on);
+  label.textContent = on ? (latched ? 'Tap to stop' : 'Listening') : state === 'sending' ? 'Finishing' : state === 'starting' ? 'Starting' : talk.disabled ? 'Paused for today' : 'Hold to talk';
+  if (!on) clock.textContent = `0:${String(CLIP_SECONDS).padStart(2, '0')}`;
 }
 
 async function allowance() {
-  if (keyField.value.trim()) return say('Using your own Gradium key. The shared limit does not apply.');
+  paused = false;
+  if (keyField.value.trim()) {
+    show();
+    return say('On your own Gradium key. The shared limit does not apply.');
+  }
   try {
     const answer = await (await fetch('/api/status', { cache: 'no-store' })).json();
-    if (!answer.shared) return say('The shared demo key is not set up yet. Paste your own Gradium key further down to try it.', true);
-    if (answer.remainingSeconds < 1) return say('Demo paused for today. Paste your own Gradium key further down, or come back tomorrow.', true);
-    const minutes = Math.floor(answer.remainingSeconds / 60);
-    say(`Shared demo: ${minutes >= 1 ? `${minutes} min` : `${Math.floor(answer.remainingSeconds)} s`} of today’s ${Math.round(answer.dailySeconds / 60)} left for everyone.`);
+    if (!answer.shared) say(`The shared key is not set up yet. ${OWN_KEY_HINT} to try it.`, true);
+    else if (answer.remainingSeconds < 1) {
+      paused = true;
+      say(`Paused for today: the shared minutes are used up. It opens again at midnight UTC. ${OWN_KEY_HINT} to keep going.`, true);
+    } else {
+      const minutes = Math.floor(answer.remainingSeconds / 60);
+      say(`Shared demo: ${minutes >= 1 ? `${minutes} min` : `${Math.floor(answer.remainingSeconds)} s`} of today’s ${Math.round(answer.dailySeconds / 60)} left for everyone.`);
+    }
   } catch {
     say('');
   }
+  show();
 }
 
-/* ---------- recording ---------- */
+/* ---------- the microphone ---------- */
 
 function microphoneProblem(error) {
-  if (!navigator.mediaDevices?.getUserMedia) return 'This browser cannot record here. Try a current Safari, Chrome or Firefox over https.';
-  if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError') return 'The microphone is blocked for this page. Allow it in the browser’s site settings, then press the button again.';
+  if (!navigator.mediaDevices?.getUserMedia) return 'This browser cannot record here. Try a current Safari, Chrome or Firefox.';
+  if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError') return 'The microphone is blocked for this page. Allow it in the browser’s site settings, then press again.';
   if (error?.name === 'NotFoundError') return 'No microphone was found.';
-  return 'The microphone could not be started. Press the button to try again.';
+  return 'The microphone could not be started. Press again to retry.';
+}
+
+/** The microphone's samples at 16 kHz, a batch at a time: each output sample is the mean of the input it covers. */
+function downsampler(from) {
+  const ratio = from / RATE;
+  let carry = new Float32Array(0);
+  let offset = 0;
+  return (batch) => {
+    const input = new Float32Array(carry.length + batch.length);
+    input.set(carry);
+    input.set(batch, carry.length);
+    const count = Math.floor((input.length - offset) / ratio);
+    const out = new Int16Array(count);
+    for (let i = 0; i < count; i++) {
+      const start = Math.floor(offset + i * ratio);
+      const end = Math.max(start + 1, Math.floor(offset + (i + 1) * ratio));
+      let sum = 0;
+      for (let k = start; k < end; k++) sum += input[k];
+      out[i] = Math.max(-1, Math.min(1, sum / (end - start))) * 0x7fff;
+    }
+    const used = offset + count * ratio;
+    carry = input.slice(Math.floor(used));
+    offset = used - Math.floor(used);
+    return out;
+  };
 }
 
 async function begin() {
-  if (state !== 'idle') return;
+  if (state !== 'idle' || talk.disabled) return;
   state = 'starting';
   releasedEarly = false;
   latched = false;
@@ -120,8 +172,10 @@ async function begin() {
       node = new AudioWorkletNode(context, 'recorder');
       node.port.onmessage = (event) => {
         if (state !== 'recording') return;
-        batches.push(event.data);
         hear(event.data);
+        const samples = resample(event.data);
+        pcm.push(samples);
+        if (press?.socket?.readyState === WebSocket.OPEN && !press.failed) press.socket.send(samples.buffer);
       };
       // Through a silent gain to the output, so the graph is pulled and nothing is heard.
       const silent = context.createGain();
@@ -134,13 +188,18 @@ async function begin() {
     say(microphoneProblem(error), true);
     return;
   }
-  batches = [];
+  pcm = [];
+  resample = downsampler(context.sampleRate);
   startedAt = performance.now();
   state = 'recording';
   // A press let go while the browser was still asking for the microphone is a tap.
   latched = releasedEarly;
   $('hint')?.remove();
-  say(latched ? 'Listening. Tap the button again when you are done.' : 'Listening.');
+  chip('first', '—');
+  chip('last', '—');
+  open();
+  say(latched ? 'Listening. Tap again when you are done.' : 'Listening.');
+  navigator.vibrate?.(8);
   show();
   ticker = setInterval(() => {
     const left = CLIP_SECONDS - (performance.now() - startedAt) / 1000;
@@ -149,23 +208,93 @@ async function begin() {
   }, 200);
 }
 
-/** The recording at 16 kHz: each output sample is the mean of the input samples it covers. */
-function resample(input, from) {
-  const ratio = from / RATE;
-  const out = new Int16Array(Math.floor(input.length / ratio));
-  for (let i = 0; i < out.length; i++) {
-    const start = Math.floor(i * ratio);
-    const end = Math.max(start + 1, Math.min(input.length, Math.floor((i + 1) * ratio)));
-    let sum = 0;
-    for (let k = start; k < end; k++) sum += input[k];
-    out[i] = Math.max(-1, Math.min(1, sum / (end - start))) * 0x7fff;
+/* ---------- a live press ---------- */
+
+/** A socket to the live relay, or nothing where there cannot be one. */
+function socket() {
+  try {
+    const made = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/live`);
+    made.binaryType = 'arraybuffer';
+    return made;
+  } catch {
+    return null;
   }
-  return out;
+}
+
+/** The next press's socket, opened when a press looks likely, so the press itself waits for nothing. An unused one closes by itself. */
+let warm = null;
+function warmUp() {
+  if (state !== 'idle' || talk.disabled || (warm && warm.readyState <= WebSocket.OPEN)) return;
+  warm = socket();
+}
+
+/** Open the live socket for this press. Words are drawn as they arrive; if it cannot be had, the clip is sent whole on release instead. */
+function open() {
+  const line = document.createElement('p');
+  line.className = 'live';
+  text.append(line);
+  const own = keyField.value.trim();
+  const mine = { socket: null, line, words: [], live: false, failed: false, spokeAt: 0, firstAt: 0, releasedAt: 0, done: null, refused: null };
+  press = mine;
+  mine.finished = new Promise((resolve) => (mine.done = resolve));
+  mine.socket = warm && warm.readyState <= WebSocket.OPEN ? warm : socket();
+  warm = null;
+  if (!mine.socket) {
+    mine.failed = true;
+    return;
+  }
+  const start = () => {
+    mine.socket.send(JSON.stringify({ type: 'start', lang: lang.value, ...(own ? { key: own } : {}) }));
+    // What was said while the socket was opening goes first.
+    for (const samples of pcm) mine.socket.send(samples.buffer);
+  };
+  if (mine.socket.readyState === WebSocket.OPEN) start();
+  else mine.socket.addEventListener('open', start);
+  mine.socket.addEventListener('message', (event) => {
+    const message = JSON.parse(event.data);
+    if (message.type === 'ready') mine.live = true;
+    else if (message.type === 'text') word(mine, message.text);
+    else if (message.type === 'end_text') mine.line.querySelector('span.fresh')?.classList.remove('fresh');
+    else if (message.type === 'flushed') {
+      mine.line.querySelectorAll('span.fresh').forEach((span) => span.classList.remove('fresh'));
+      if (mine.releasedAt) chip('last', `${Math.max(0, Math.round(performance.now() - mine.releasedAt))} ms`);
+    } else if (message.type === 'limit') finish();
+    else if (message.type === 'refused') {
+      // Gradium's socket could not be had: keep recording and send the clip whole on release.
+      if (message.error === 'vendor') return void (mine.failed = true);
+      mine.refused = message;
+      finish();
+    }
+    else if (message.type === 'done') {
+      mine.seconds = message.seconds;
+      mine.socket.close();
+    }
+  });
+  const over = () => {
+    if (!mine.live) mine.failed = true;
+    mine.done();
+  };
+  mine.socket.addEventListener('close', over);
+  mine.socket.addEventListener('error', over);
+}
+
+/** One more word from Gradium: drawn light, and settled when Gradium says it is final. */
+function word(mine, heard) {
+  if (!mine.firstAt) {
+    mine.firstAt = performance.now();
+    if (mine.spokeAt) chip('first', `${Math.max(0, Math.round(mine.firstAt - mine.spokeAt))} ms`);
+  }
+  mine.words.push(heard);
+  const span = document.createElement('span');
+  span.className = 'fresh';
+  span.textContent = `${mine.words.length > 1 ? ' ' : ''}${heard}`;
+  mine.line.append(span);
+  text.scrollTop = text.scrollHeight;
 }
 
 function wav(samples) {
   const bytes = new DataView(new ArrayBuffer(44 + samples.length * 2));
-  const write = (at, word) => [...word].forEach((c, i) => bytes.setUint8(at + i, c.charCodeAt(0)));
+  const write = (at, tag) => [...tag].forEach((c, i) => bytes.setUint8(at + i, c.charCodeAt(0)));
   write(0, 'RIFF');
   bytes.setUint32(4, 36 + samples.length * 2, true);
   write(8, 'WAVE');
@@ -186,40 +315,53 @@ function wav(samples) {
 async function finish() {
   if (state !== 'recording') return;
   clearInterval(ticker);
-  const released = performance.now();
+  const mine = press;
   // The last syllable is still on its way through the worklet.
   await new Promise((done) => setTimeout(done, 140));
+  mine.releasedAt = performance.now();
   state = 'sending';
   show();
+  navigator.vibrate?.(8);
   context.suspend();
   levels = new Array(COLUMNS).fill(0);
   drawMeter();
 
-  const whole = new Float32Array(batches.reduce((n, batch) => n + batch.length, 0));
+  const samples = new Int16Array(pcm.reduce((n, part) => n + part.length, 0));
   let at = 0;
-  for (const batch of batches) {
-    whole.set(batch, at);
-    at += batch.length;
+  for (const part of pcm) {
+    samples.set(part, at);
+    at += part.length;
   }
-  batches = [];
-  const samples = resample(whole, context.sampleRate).subarray(0, CLIP_SECONDS * RATE);
-  if (samples.length < RATE * 0.4) {
-    state = 'idle';
-    show();
-    return say('That was too short to hear. Hold the button a little longer.', true);
+  const seconds = Math.min(CLIP_SECONDS, samples.length / RATE);
+
+  if (!mine.failed && mine.socket?.readyState === WebSocket.OPEN) {
+    mine.socket.send(JSON.stringify({ type: 'flush' }));
+    await Promise.race([mine.finished, new Promise((done) => setTimeout(done, 8000))]);
+    if (mine.socket.readyState === WebSocket.OPEN) mine.socket.close();
   }
-  await send(wav(samples), samples.length / RATE, released);
+  if (mine.refused) {
+    mine.line.remove();
+    say(mine.refused.message, true);
+    if (mine.refused.error === 'paused_today') await allowance();
+  } else if (mine.live) {
+    settle(mine.line, mine.words.join(' '), seconds, mine.releasedAt);
+  } else if (samples.length < RATE * 0.4) {
+    mine.line.remove();
+    say('That was too short to hear. Hold a little longer.', true);
+  } else {
+    // No live socket here: send the clip whole, as the first version of this page did.
+    await send(mine.line, wav(samples.subarray(0, CLIP_SECONDS * RATE)), seconds, mine.releasedAt);
+  }
+  press = null;
   state = 'idle';
   show();
+  // Whoever spoke once is likely to speak again.
+  warmUp();
 }
 
-/* ---------- sending ---------- */
+/* ---------- a clip sent whole, when there is no live socket ---------- */
 
-async function send(clip, seconds, released) {
-  const line = document.createElement('p');
-  line.className = 'live';
-  text.append(line);
-  text.scrollTop = text.scrollHeight;
+async function send(line, clip, seconds, released) {
   say('Transcribing with Gradium…');
   const own = keyField.value.trim();
   try {
@@ -235,41 +377,47 @@ async function send(clip, seconds, released) {
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
+    let heard = '';
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      line.textContent += decoder.decode(value, { stream: true });
+      heard += decoder.decode(value, { stream: true });
+      line.textContent = heard;
       text.scrollTop = text.scrollHeight;
     }
-    line.className = '';
-    const said = line.textContent.trim();
-    if (!said) {
-      line.remove();
-      return say('No words were heard in that clip. Try again, a little closer to the microphone.', true);
-    }
-    line.dataset.heard = said;
-    line.dataset.language = lang.value;
-    write(line);
-    const words = wordCount(said);
-    const ms = Math.round(performance.now() - released);
-    say(`${words} words in ${seconds.toFixed(1)} s of speech · text ${(ms / 1000).toFixed(1)} s after you stopped`);
-    pace(words, seconds);
-    setTimeout(() => state === 'idle' && allowance(), 8000);
+    chip('last', `${Math.round(performance.now() - released)} ms`);
+    settle(line, heard, seconds, released);
   } catch {
     line.remove();
     say('The demo could not be reached. Check the connection and try again.', true);
   }
 }
 
-/* ---------- tidying, and how fast that was ---------- */
+/* ---------- once the words are in: tidy, and how fast that was ---------- */
+
+function settle(line, heard, seconds) {
+  const said = heard.trim();
+  if (!said) {
+    line.remove();
+    return say('No words were heard. Try again, a little closer to the microphone.', true);
+  }
+  line.className = '';
+  line.dataset.heard = said;
+  line.dataset.language = lang.value;
+  write(line);
+  const words = wordCount(said);
+  say(`${words} ${words === 1 ? 'word' : 'words'} in ${seconds.toFixed(1)} s of speech.`);
+  pace(words, seconds);
+  setTimeout(() => state === 'idle' && allowance(), 8000);
+}
 
 /** Draw a clip's line: tidied or as it was heard, with what the tidy-up took out. */
 function write(line) {
   const heard = line.dataset.heard;
   const tidied = tidy(heard, line.dataset.language);
-  const text = tidyOn.checked && tidied.text ? tidied.text : heard;
+  const shown = tidyOn.checked && tidied.text ? tidied.text : heard[0].toUpperCase() + heard.slice(1);
   const took = [tidied.fillers && `${tidied.fillers} ${tidied.fillers === 1 ? 'um' : 'ums'}`, tidied.repeats && `${tidied.repeats} doubled ${tidied.repeats === 1 ? 'word' : 'words'}`].filter(Boolean);
-  line.replaceChildren(text);
+  line.replaceChildren(shown);
   if (took.length) {
     const note = document.createElement('span');
     note.className = 'took';
@@ -303,13 +451,14 @@ const release = () => {
   if (performance.now() - startedAt >= HOLD_MS) return void finish();
   // A tap, not a hold: keep listening until the next tap.
   latched = true;
-  say('Listening. Tap the button again when you are done.');
+  say('Listening. Tap again when you are done.');
   show();
 };
+for (const sign of ['pointerenter', 'focus']) talk.addEventListener(sign, warmUp);
 talk.addEventListener('pointerup', release);
 talk.addEventListener('pointercancel', release);
 talk.addEventListener('contextmenu', (event) => event.preventDefault());
-// The keyboard: Space or Enter starts, and the same again stops.
+// The keyboard, on the button: Space or Enter starts, and the same again stops.
 talk.addEventListener('keydown', (event) => {
   if (event.key !== ' ' && event.key !== 'Enter') return;
   event.preventDefault();
@@ -320,7 +469,7 @@ talk.addEventListener('keydown', (event) => {
 });
 
 $('copy').addEventListener('click', async () => {
-  const all = [...text.querySelectorAll('p:not(.hint)')].map((p) => p.firstChild?.textContent ?? '').join('\n\n');
+  const all = [...text.querySelectorAll('p[data-heard]')].map((p) => p.firstChild?.textContent ?? '').join('\n\n');
   if (!all) return say('Nothing to copy yet.');
   try {
     await navigator.clipboard.writeText(all);
@@ -330,11 +479,13 @@ $('copy').addEventListener('click', async () => {
   }
 });
 $('clear').addEventListener('click', () => {
+  if (state !== 'idle') return;
   text.replaceChildren();
-  say('');
+  chip('first', '—');
+  chip('last', '—');
   allowance();
 });
-keyField.addEventListener('change', allowance);
+keyField.addEventListener('input', allowance);
 tidyOn.addEventListener('change', () => text.querySelectorAll('p[data-heard]').forEach(write));
 
 // Space, held anywhere on the page that is not a field or a button, is the button.
@@ -349,6 +500,9 @@ addEventListener('keyup', (event) => {
   if (event.code !== 'Space' || typing(event.target)) return;
   release();
 });
+
+// Framed by the deck's demo slide: say the page is here, so the slide can take its poster away.
+if (embedded && parent !== window) parent.postMessage({ type: 'gradium-dictation:ready' }, '*');
 
 show();
 allowance();
