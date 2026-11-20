@@ -8,6 +8,8 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handleStatus, handleTranscribe } from './lib/handlers.js';
 import { memoryCache } from './lib/limits.js';
+import { gradiumSocket, liveRequest, relay } from './lib/live.js';
+import { WebSocket, WebSocketServer } from 'ws';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const headers = JSON.parse(await readFile(join(here, 'vercel.json'), 'utf8')).headers[0].headers;
@@ -15,7 +17,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 const cache = memoryCache();
 const port = Number(process.env.PORT ?? 4173);
 
-createServer(async (req, res) => {
+const server = createServer(async (req, res) => {
   for (const { key, value } of headers) res.setHeader(key, value);
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (url.pathname.startsWith('/api/')) {
@@ -34,4 +36,14 @@ createServer(async (req, res) => {
   } catch {
     res.writeHead(404, { 'content-type': 'text/plain' }).end('Not found');
   }
-}).listen(port, '127.0.0.1', () => console.log(`gradium-dictation demo on http://127.0.0.1:${port}`));
+});
+
+// The live relay, as /api/live does it on Vercel.
+const sockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+server.on('upgrade', (req, socket, head) => {
+  const asked = liveRequest(new Request(new URL(req.url, `http://${req.headers.host}`), { headers: req.headers }));
+  if (!req.url.startsWith('/api/live') || asked.refuse) return socket.destroy();
+  sockets.handleUpgrade(req, socket, head, (ws) => relay(ws, { language: asked.language, address: asked.address, cache, connect: gradiumSocket(WebSocket) }));
+});
+
+server.listen(port, '127.0.0.1', () => console.log(`gradium-dictation demo on http://127.0.0.1:${port}`));
