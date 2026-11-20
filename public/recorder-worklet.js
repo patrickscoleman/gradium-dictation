@@ -1,8 +1,8 @@
-// The microphone, in batches of 2,048 samples, handed to the page as they fill.
+// The microphone, in batches of 1,024 samples (about 21 ms), handed to the page as they fill.
 class Recorder extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.batch = new Float32Array(2048);
+    this.batch = new Float32Array(1024);
     this.at = 0;
   }
 

@@ -165,7 +165,7 @@ footer { margin-top: clamp(64px, 10vw, 120px); padding: 26px 20px max(34px, env(
   .stage > .chips { order: 2; }
   .stage > .how { order: 3; }
   .stage > .status { order: 2; }
-  .chip:nth-child(3) { display: none; }
+  .chip:nth-child(4) { display: none; }
   .chip i .long { display: none; }
   .meter span:nth-child(n + 9) { display: none; }
   .field { flex: 1 1 150px; }

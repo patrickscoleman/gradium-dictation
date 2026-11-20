@@ -52,7 +52,10 @@ test('a press is set up at the lowest delay, relayed word by word, and ended on 
   gradium.emit('message', JSON.stringify({ type: 'text', text: 'hello', start_s: 0.2, stream_id: 0 }));
   gradium.emit('message', JSON.stringify({ type: 'step', vad: [] }));
   gradium.emit('message', JSON.stringify({ type: 'end_text', stop_s: 0.6 }));
-  assert.deepEqual(client.sent, [{ type: 'ready', delay_in_frames: 7, key: 'shared' }, { type: 'text', text: 'hello', start_s: 0.2 }, { type: 'end_text', stop_s: 0.6 }]);
+  const { took, ...readyMessage } = client.sent[0];
+  assert.deepEqual(readyMessage, { type: 'ready', delay_in_frames: 7, key: 'shared' });
+  assert.deepEqual(Object.keys(took).sort(), ['admit', 'connect', 'setup', 'warm'], 'the press says how long each step took');
+  assert.deepEqual(client.sent.slice(1), [{ type: 'text', text: 'hello', start_s: 0.2 }, { type: 'end_text', stop_s: 0.6 }]);
   client.emit('message', JSON.stringify({ type: 'flush' }), false);
   assert.deepEqual(types(gradium).slice(-2), ['flush', 'end_of_stream']);
   client.emit('message', second(), true);
@@ -85,10 +88,12 @@ test('the server ends a press at a clip’s length, whatever the browser sends',
 test('past the day’s allowance a press is refused before Gradium is called', async () => {
   const cache = memoryCache();
   await cache.set('day:2026-11-21', CONFIG.dailySeconds - 10);
-  const { client, used } = press({ cache });
+  const { client, gradium } = press({ cache });
   client.emit('message', JSON.stringify({ type: 'start' }), false);
   await settle();
-  assert.deepEqual(used, []);
+  // Its socket may have been opened while the press was counted; nothing was sent on it, and it is closed.
+  assert.deepEqual(gradium.sent.filter((m) => m.type === 'audio'), []);
+  assert.equal(gradium.readyState, 3);
   assert.equal(client.sent[0].type, 'refused');
   assert.match(client.sent[0].message, /Demo paused for today/);
   assert.equal(client.closed, 1008);
@@ -96,7 +101,58 @@ test('past the day’s allowance a press is refused before Gradium is called', a
   floored.client.emit('message', JSON.stringify({ type: 'start' }), false);
   await settle();
   assert.equal(floored.client.sent[0].error, 'paused_today');
-  assert.deepEqual(floored.used, []);
+  assert.deepEqual(floored.used, [], 'under the floor, Gradium is not called at all');
+});
+
+test('a press that looked likely finds Gradium already listening, and has cost nobody anything', async () => {
+  const { client, gradium, used, cache } = press();
+  client.emit('message', JSON.stringify({ type: 'warm', lang: 'fr' }), false);
+  await settle();
+  assert.deepEqual(used, [SHARED]);
+  gradium.emit('open');
+  assert.equal(gradium.sent[0].json_config.language, 'fr');
+  gradium.emit('message', JSON.stringify({ type: 'ready' }));
+  assert.equal(client.sent[0].type, 'warm');
+  assert.equal(await createLimits(cache, now).remainingToday(), CONFIG.dailySeconds, 'nothing is held until the press');
+  // Audio before the press is not a press.
+  client.emit('message', second(), true);
+  assert.equal(gradium.sent.filter((m) => m.type === 'audio').length, 0);
+  client.emit('message', JSON.stringify({ type: 'start', lang: 'fr' }), false);
+  await settle();
+  assert.deepEqual(used, [SHARED], 'the same socket, not a second one');
+  assert.equal(client.sent[1].type, 'ready');
+  client.emit('message', second(), true);
+  assert.equal(gradium.sent.filter((m) => m.type === 'audio').length, 1);
+  client.emit('close');
+});
+
+test('a socket opened ahead for another language is not used for the press', async () => {
+  const sockets = [];
+  const client = new Socket();
+  relay(client, { language: 'en', address: '203.0.113.7', cache: memoryCache(), sharedKey: SHARED, now, floor: async () => true, connect: () => (sockets.push(new Socket()), sockets.at(-1)) });
+  client.emit('message', JSON.stringify({ type: 'warm', lang: 'en' }), false);
+  await settle();
+  sockets[0].emit('open');
+  sockets[0].emit('message', JSON.stringify({ type: 'ready' }));
+  client.emit('message', JSON.stringify({ type: 'start', lang: 'de' }), false);
+  await settle();
+  assert.equal(sockets.length, 2);
+  assert.equal(sockets[0].readyState, 3);
+  sockets[1].emit('open');
+  assert.equal(sockets[1].sent[0].json_config.language, 'de');
+  assert.equal(client.closed, null, 'the first socket closing does not end the press');
+  client.emit('close');
+});
+
+test('a paused day is known before the press, and said at it', async () => {
+  const { client, used } = press({ floor: async () => false });
+  client.emit('message', JSON.stringify({ type: 'warm' }), false);
+  await settle();
+  assert.deepEqual(used, []);
+  client.emit('message', JSON.stringify({ type: 'start' }), false);
+  await settle();
+  assert.equal(client.sent[0].error, 'paused_today');
+  assert.deepEqual(used, []);
 });
 
 test('a visitor’s own key is the key Gradium gets, and the shared allowance is untouched', async () => {

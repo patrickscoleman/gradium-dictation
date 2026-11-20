@@ -126,6 +126,7 @@ function microphoneProblem(error) {
   if (!navigator.mediaDevices?.getUserMedia) return 'This browser cannot record here. Try a current Safari, Chrome or Firefox.';
   if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError') return 'The microphone is blocked for this page. Allow it in the browser’s site settings, then press again.';
   if (error?.name === 'NotFoundError') return 'No microphone was found.';
+  if (error?.name === 'AsleepError') return 'The browser would not start audio. Tap the button once more.';
   return 'The microphone could not be started. Press again to retry.';
 }
 
@@ -160,13 +161,17 @@ async function begin() {
   releasedEarly = false;
   latched = false;
   show();
+  // The browser may be asking for the microphone: say so, so "Starting" is never a silent wait.
+  const asking = setTimeout(() => state === 'starting' && say('Waiting for the microphone. If the browser is asking, choose Allow.'), 700);
   try {
     // Made inside the press, before anything is awaited: Safari starts an
     // audio context only from a gesture.
     context ??= new AudioContext();
     const awake = context.resume();
     stream ??= await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-    await awake;
+    // A context that will not wake in three seconds is not going to: carry on and let the first samples say so.
+    await Promise.race([awake, new Promise((done) => setTimeout(done, 3000))]);
+    if (context.state !== 'running') throw Object.assign(new Error('asleep'), { name: 'AsleepError' });
     if (!node) {
       await context.audioWorklet.addModule('/recorder-worklet.js');
       node = new AudioWorkletNode(context, 'recorder');
@@ -183,11 +188,13 @@ async function begin() {
       context.createMediaStreamSource(stream).connect(node).connect(silent).connect(context.destination);
     }
   } catch (error) {
+    clearTimeout(asking);
     state = 'idle';
     show();
     say(microphoneProblem(error), true);
     return;
   }
+  clearTimeout(asking);
   pcm = [];
   resample = downsampler(context.sampleRate);
   startedAt = performance.now();
@@ -196,6 +203,7 @@ async function begin() {
   latched = releasedEarly;
   $('hint')?.remove();
   chip('first', '—');
+  chip('lag', '—');
   chip('last', '—');
   open();
   say(latched ? 'Listening. Tap again when you are done.' : 'Listening.');
@@ -221,11 +229,35 @@ function socket() {
   }
 }
 
-/** The next press's socket, opened when a press looks likely, so the press itself waits for nothing. An unused one closes by itself. */
+/**
+ * The next press's socket, opened when a press looks likely and told which
+ * language and key it is for, so the relay has Gradium connected and set up
+ * before the press. An unused one closes by itself after 20 seconds; while
+ * somebody is plainly here, another takes its place.
+ */
 let warm = null;
+let warmFor = '';
+let hereUntil = 0;
+const STAY_WARM_MS = 10 * 60_000;
 function warmUp() {
-  if (state !== 'idle' || talk.disabled || (warm && warm.readyState <= WebSocket.OPEN)) return;
-  warm = socket();
+  hereUntil = performance.now() + STAY_WARM_MS;
+  rewarm();
+}
+function rewarm() {
+  const wanted = `${lang.value}|${keyField.value.trim()}`;
+  if (warm && warm.readyState <= WebSocket.OPEN) {
+    if (warmFor === wanted) return;
+    warm.close();
+  }
+  if (state !== 'idle' || talk.disabled || document.hidden || performance.now() > hereUntil) return;
+  const made = socket();
+  if (!made) return;
+  warm = made;
+  warmFor = wanted;
+  const own = keyField.value.trim();
+  made.addEventListener('open', () => made === warm && made.send(JSON.stringify({ type: 'warm', lang: lang.value, ...(own ? { key: own } : {}) })));
+  // It lapsed unused: keep one ready while the visitor is still here.
+  made.addEventListener('close', () => made === warm && ((warm = null), setTimeout(rewarm, 250)));
 }
 
 /** Open the live socket for this press. Words are drawn as they arrive; if it cannot be had, the clip is sent whole on release instead. */
@@ -234,10 +266,12 @@ function open() {
   line.className = 'live';
   text.append(line);
   const own = keyField.value.trim();
-  const mine = { socket: null, line, words: [], live: false, failed: false, spokeAt: 0, firstAt: 0, releasedAt: 0, done: null, refused: null };
+  const mine = { socket: null, line, words: [], lags: [], live: false, failed: false, warmed: false, pressedAt: performance.now(), spokeAt: 0, firstAt: 0, readyAt: 0, releasedAt: 0, done: null, refused: null, took: null };
   press = mine;
   mine.finished = new Promise((resolve) => (mine.done = resolve));
-  mine.socket = warm && warm.readyState <= WebSocket.OPEN ? warm : socket();
+  mine.socket = warm && warm.readyState <= WebSocket.OPEN && warmFor === `${lang.value}|${own}` ? warm : socket();
+  mine.warmed = mine.socket === warm && warm.readyState === WebSocket.OPEN;
+  if (warm && warm !== mine.socket) warm.close();
   warm = null;
   if (!mine.socket) {
     mine.failed = true;
@@ -252,12 +286,17 @@ function open() {
   else mine.socket.addEventListener('open', start);
   mine.socket.addEventListener('message', (event) => {
     const message = JSON.parse(event.data);
-    if (message.type === 'ready') mine.live = true;
-    else if (message.type === 'text') word(mine, message.text);
+    if (message.type === 'ready') {
+      mine.live = true;
+      mine.readyAt = performance.now();
+      mine.took = message.took;
+    } else if (message.type === 'warm') mine.took = message.took;
+    else if (message.type === 'text') word(mine, message.text, message.start_s);
     else if (message.type === 'end_text') mine.line.querySelector('span.fresh')?.classList.remove('fresh');
     else if (message.type === 'flushed') {
       mine.line.querySelectorAll('span.fresh').forEach((span) => span.classList.remove('fresh'));
-      if (mine.releasedAt) chip('last', `${Math.max(0, Math.round(performance.now() - mine.releasedAt))} ms`);
+      mine.flushedAt = performance.now();
+      if (mine.releasedAt) chip('last', `${Math.max(0, Math.round(mine.flushedAt - mine.releasedAt))} ms`);
     } else if (message.type === 'limit') finish();
     else if (message.type === 'refused') {
       // Gradium's socket could not be had: keep recording and send the clip whole on release.
@@ -279,10 +318,17 @@ function open() {
 }
 
 /** One more word from Gradium: drawn light, and settled when Gradium says it is final. */
-function word(mine, heard) {
+function word(mine, heard, startS) {
+  const landed = performance.now();
   if (!mine.firstAt) {
-    mine.firstAt = performance.now();
+    mine.firstAt = landed;
     if (mine.spokeAt) chip('first', `${Math.max(0, Math.round(mine.firstAt - mine.spokeAt))} ms`);
+  }
+  // How far behind the voice this word landed: now, against when Gradium says it began in the audio.
+  if (typeof startS === 'number') {
+    mine.lags.push(landed - startedAt - startS * 1000);
+    const recent = mine.lags.slice(-5).sort((a, b) => a - b);
+    chip('lag', `${Math.max(0, Math.round(recent[Math.floor(recent.length / 2)]))} ms`);
   }
   mine.words.push(heard);
   const span = document.createElement('span');
@@ -352,6 +398,10 @@ async function finish() {
     // No live socket here: send the clip whole, as the first version of this page did.
     await send(mine.line, wav(samples.subarray(0, CLIP_SECONDS * RATE)), seconds, mine.releasedAt);
   }
+  // What this press took, step by step, for whoever is measuring (and for the console).
+  const since = (at) => (at ? Math.round(at - mine.pressedAt) : null);
+  window.lastPress = { warmed: mine.warmed, relay: mine.took, ready: since(mine.readyAt), spoke: since(mine.spokeAt), firstWord: since(mine.firstAt), released: since(mine.releasedAt), flushed: since(mine.flushedAt), firstWordAfterVoice: mine.firstAt && mine.spokeAt ? Math.round(mine.firstAt - mine.spokeAt) : null, lastWordAfterRelease: mine.flushedAt ? Math.round(mine.flushedAt - mine.releasedAt) : null };
+  console.table(window.lastPress);
   press = null;
   state = 'idle';
   show();
@@ -455,6 +505,9 @@ const release = () => {
   show();
 };
 for (const sign of ['pointerenter', 'focus']) talk.addEventListener(sign, warmUp);
+addEventListener('touchstart', warmUp, { passive: true, once: true });
+document.addEventListener('visibilitychange', () => !document.hidden && rewarm());
+lang.addEventListener('change', warmUp);
 talk.addEventListener('pointerup', release);
 talk.addEventListener('pointercancel', release);
 talk.addEventListener('contextmenu', (event) => event.preventDefault());
@@ -482,10 +535,12 @@ $('clear').addEventListener('click', () => {
   if (state !== 'idle') return;
   text.replaceChildren();
   chip('first', '—');
+  chip('lag', '—');
   chip('last', '—');
   allowance();
 });
 keyField.addEventListener('input', allowance);
+keyField.addEventListener('change', warmUp);
 tidyOn.addEventListener('change', () => text.querySelectorAll('p[data-heard]').forEach(write));
 
 // Space, held anywhere on the page that is not a field or a button, is the button.
@@ -505,4 +560,11 @@ addEventListener('keyup', (event) => {
 if (embedded && parent !== window) parent.postMessage({ type: 'gradium-dictation:ready' }, '*');
 
 show();
-allowance();
+// Where the microphone is already allowed, be ready before the first press.
+allowance().then(async () => {
+  try {
+    if ((await navigator.permissions.query({ name: 'microphone' })).state === 'granted') warmUp();
+  } catch {
+    /* A browser that will not say: the first hover or touch warms it. */
+  }
+});
