@@ -1,3 +1,5 @@
+<img src="assets/logo.svg" alt="" width="96" align="right">
+
 # gradium-dictation
 
 Hold a key, speak, release: your words land in whatever app you're in. It's an
@@ -67,6 +69,12 @@ latency.
 - **A menu bar app**, with a sound and a level meter while recording, and a
   signed macOS build.
 - **Streaming insert**, typing text live as it arrives.
+
+## The mark
+
+`assets/logo.svg`: a voice, as columns of dots, arriving at a text cursor.
+Original artwork for this project, under the same licence. It is not a
+Gradium logo, and this is not a Gradium product.
 
 ## License
 
