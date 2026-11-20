@@ -54,9 +54,11 @@ Vercel deploys as they are on every push to `main`.
   speech-to-text and streams the words back. A visitor can paste their own
   key instead: it is passed to Gradium for that request and kept nowhere.
 - **What the shared key can spend.** Gradium bills speech-to-text at 3 credits
-  a second. The shared key gives everybody together 30 minutes a day (5,400
-  credits: about 29 cents at the XS plan's own rate, 38 cents at its top-up
-  rate), one address 5 minutes a day and 8 clips in 10 minutes. Past that
+  a second. The shared key gives everybody together 4 hours a day (43,200
+  credits: about $2.30 at the XS plan's own rate, $3.02 at its top-up
+  rate), and one address 80 minutes a day and 100 clips in 10 minutes. These
+  were raised from 30 minutes on 2026-11-20 because the link is not public and
+  the interview must not hit a limit in normal use. Past that
   the page says "Demo paused for today". It also stops whenever the account
   has fewer than 120,000 credits left, by Gradium's own count, so a lost
   counter cannot run the account down. The numbers are in `lib/config.js`.
