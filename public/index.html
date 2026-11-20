@@ -5,77 +5,157 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="robots" content="noindex, nofollow, noarchive" />
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0c0d0f" />
-    <meta name="description" content="Hold a button, speak, and read your words as text: a demo of gradium-dictation, an open-source dictation tool on Gradium speech-to-text." />
+    <meta name="theme-color" content="#0a0a0b" />
+    <meta name="description" content="Hold a button, speak, and read your words as clean text: a demo of gradium-dictation, an open-source dictation tool on Gradium speech-to-text." />
     <title>gradium-dictation · a demo by Patrick Coleman</title>
     <link rel="icon" href="/logo.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/app.css" />
   </head>
   <body>
-    <main>
-      <p class="label by"><span class="dot"></span>A demo by Patrick Coleman · not a Gradium product</p>
+    <p class="banner"><span class="new">Demo</span><span>Open-source dictation on Gradium speech-to-text</span><span class="sep">·</span><span class="quiet">by Patrick Coleman, not a Gradium product</span></p>
 
-      <header class="lockup">
-        <img src="/logo.svg" width="76" height="76" alt="" />
+    <header class="nav">
+      <a class="brand" href="#top" aria-label="gradium-dictation">
+        <img src="/logo.svg" width="36" height="36" alt="" />
+        <span><span class="grey">gradium-</span>dictation</span>
+      </a>
+      <nav aria-label="On this page">
+        <a href="#how">How it works</a>
+        <a href="#tidy">Tidy-up</a>
+        <a href="#yours">Your own key</a>
+      </nav>
+      <a class="pill" href="#try">Start talking</a>
+    </header>
+
+    <div class="sky" aria-hidden="true"><canvas id="cloud" class="cloud"></canvas></div>
+
+    <main id="top">
+      <section class="hero">
+        <p class="label">Open-source dictation</p>
+        <h1>The <mark>fastest</mark> keyboard is your voice.<span class="grey">Hold, speak, read it back as text.</span></h1>
+        <p class="lede">People talk about three times faster than they type. This is the smallest tool that lets you: press, say it, and the words are on the page.</p>
+      </section>
+
+      <section id="try" class="stage" aria-label="Try it">
+        <div class="notes">
+          <div class="bar">
+            <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="file">notes.md</span>
+            <span class="tools">
+              <button id="copy" class="ghost" type="button">Copy</button>
+              <button id="clear" class="ghost" type="button">Clear</button>
+            </span>
+          </div>
+          <div id="text" class="text" aria-live="polite">
+            <p id="hint" class="hint">Hold the button and say something. Your words land here.</p>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button id="talk" class="talk" type="button" aria-pressed="false">
+            <span class="lamp" aria-hidden="true"></span>
+            <span id="meter" class="meter" aria-hidden="true"></span>
+            <span id="talk-label" class="talk-label">Hold to talk</span>
+            <span id="clock" class="clock" aria-hidden="true">0:30</span>
+          </button>
+          <label class="field">
+            <span class="label">Language</span>
+            <select id="lang">
+              <option value="en">English</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+              <option value="es">Español</option>
+              <option value="pt">Português</option>
+              <option value="any">Automatic</option>
+            </select>
+          </label>
+          <label class="switch">
+            <input id="tidy-on" type="checkbox" checked />
+            <span class="track" aria-hidden="true"></span>
+            <span class="label">Tidy up</span>
+          </label>
+        </div>
+        <p class="how">Hold the button, or hold <kbd>Space</kbd>, while you speak. Or tap once to start and again to stop. Up to 30 seconds a clip.</p>
+        <p id="status" class="status" role="status"></p>
+      </section>
+
+      <section class="figures" aria-label="Speaking against typing">
         <div>
-          <p class="name"><span class="grey">gradium-</span>dictation</p>
-          <p class="label">Open source · speech-to-text by Gradium</p>
+          <p class="figure"><span id="pace">150</span><small>wpm</small></p>
+          <p id="pace-label" class="label">A typical speaker</p>
         </div>
-      </header>
-
-      <h1><span class="grey">Speak anywhere.</span> Your words, as text.</h1>
-
-      <section class="notes" aria-label="What you said">
-        <div class="bar">
-          <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span class="file">notes.md</span>
-          <span class="tools">
-            <button id="copy" class="ghost" type="button">Copy</button>
-            <button id="clear" class="ghost" type="button">Clear</button>
-          </span>
+        <div>
+          <p class="figure">52<small>wpm</small></p>
+          <p class="label">The average typist</p>
         </div>
-        <div id="text" class="text" aria-live="polite">
-          <p id="hint" class="hint">Press the button, say something, and press it again. Your words land here.</p>
+        <div>
+          <p class="figure neon"><span id="times">2.9</span><small>×</small></p>
+          <p id="times-label" class="label">Faster, said than typed</p>
+        </div>
+      </section>
+      <p class="source">Typing: 168,000 volunteers, Dhakal et al., CHI 2018. Speech: about 150 words a minute in conversation. After your first clip, the first number is yours.</p>
+
+      <section id="how" class="block">
+        <p class="label center">How it works</p>
+        <h2>Three steps, <span class="grey">and the second one is talking.</span></h2>
+        <div class="steps">
+          <article>
+            <p class="step">01</p>
+            <h3>Hold</h3>
+            <p>Press the button or the space bar. The dots light up when it can hear you.</p>
+          </article>
+          <article>
+            <p class="step">02</p>
+            <h3>Speak</h3>
+            <p>Say it the way you would say it to a person. English, French, German, Spanish or Portuguese.</p>
+          </article>
+          <article>
+            <p class="step">03</p>
+            <h3>Read</h3>
+            <p>Let go. Gradium turns the clip into text, the tidy-up takes out the ums, and it is ready to copy.</p>
+          </article>
         </div>
       </section>
 
-      <div class="controls">
-        <button id="talk" class="talk" type="button" aria-pressed="false">
-          <span class="lamp" aria-hidden="true"></span>
-          <span id="meter" class="meter" aria-hidden="true"></span>
-          <span id="talk-label" class="talk-label">Hold to talk</span>
-          <span id="clock" class="clock" aria-hidden="true">0:30</span>
-        </button>
-        <label class="lang">
-          <span class="label">Language</span>
-          <select id="lang">
-            <option value="en">English</option>
-            <option value="fr">Français</option>
-            <option value="de">Deutsch</option>
-            <option value="es">Español</option>
-            <option value="pt">Português</option>
-            <option value="any">Automatic</option>
-          </select>
-        </label>
-      </div>
-      <p class="how">Hold the button while you speak, or tap it once to start and again to stop. Up to 30 seconds a clip.</p>
-      <p id="status" class="status" role="status"></p>
+      <section id="tidy" class="block">
+        <p class="label center">Tidy-up</p>
+        <h2>You said it once. <span class="grey">It should read that way.</span></h2>
+        <div class="pair">
+          <article class="card">
+            <p class="label">What was heard</p>
+            <p class="heard">
+              <s>Um,</s> so the <s>the</s> launch moves to <s>uh</s> Monday. we <s>we</s> are waiting on legal, <s>hmm,</s> and I will confirm by Thursday
+            </p>
+          </article>
+          <article class="card lit">
+            <p class="label neon">What lands on the page</p>
+            <p class="clean">So the launch moves to Monday. We are waiting on legal, and I will confirm by Thursday.</p>
+          </article>
+        </div>
+        <p class="aside">The tidy-up is rules, not a rewrite: it removes ums and doubled words and fixes capitals. Every word left is one you said. Switch it off beside the button to see exactly what was heard.</p>
+      </section>
 
-      <details class="own">
-        <summary>Use your own Gradium key</summary>
-        <p>
-          Paste an API key from your Gradium account. It travels with each clip to this demo’s server, which passes it to Gradium and keeps nothing. It stays in this page only until you reload or close it.
-        </p>
-        <input id="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Your Gradium API key" aria-label="Your Gradium API key" />
-      </details>
-
-      <footer>
-        <p>
-          What happens to your voice: the clip goes to this demo’s server and on to Gradium to be transcribed. This site keeps no audio and no text, and sets no cookies.
-        </p>
-        <p class="label">Open source, MIT · the shared demo has a daily limit · built with coding agents</p>
-      </footer>
+      <section id="yours" class="block">
+        <p class="label center">Yours to run</p>
+        <h2>Open source, <span class="grey">on your own Gradium key.</span></h2>
+        <div class="pair">
+          <article class="card">
+            <h3>Use your own key</h3>
+            <p>Paste an API key from your Gradium account. It travels with each clip to this demo’s server, which passes it to Gradium and keeps nothing. It stays in this page only until you reload or close it.</p>
+            <input id="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Your Gradium API key" aria-label="Your Gradium API key" />
+          </article>
+          <article class="card">
+            <h3>What this demo does with your voice</h3>
+            <p>The clip goes to this demo’s server and on to Gradium to be transcribed. This site keeps no audio and no text, and sets no cookies. The shared demo has a daily limit for everyone; with your own key there is none.</p>
+            <p class="label">MIT licence · a desktop version that types into any app is in the works</p>
+          </article>
+        </div>
+      </section>
     </main>
+
+    <footer>
+      <p class="label">A demo by Patrick Coleman · not a Gradium product · speech-to-text by Gradium · built with coding agents</p>
+    </footer>
     <script src="/app.js" type="module"></script>
   </body>
 </html>

@@ -40,6 +40,12 @@ installing anything: press the button, speak, and read the text. It is a
 static page (`public/`) and two small functions (`api/`, `lib/`), which
 Vercel deploys as they are on every push to `main`.
 
+<img src="docs/desktop-rest.jpg" alt="The demo page: a headline, a notes window and a hold-to-talk button" width="720">
+
+- **What it does:** hold the button (or the space bar), speak, let go. The
+  text arrives, the tidy-up takes out ums and doubled words (rules, not a
+  rewrite; one switch shows exactly what was heard), and the page works out
+  your words a minute against the average typist's 52.
 - **Run it here:** `GRADIUM_API_KEY=gd_... node dev.mjs`, then open
   http://127.0.0.1:4173. Leave the key out and paste one into the page instead.
   `node --test` runs its tests.
@@ -107,6 +113,8 @@ latency.
 - **Streaming insert**, typing text live as it arrives.
 - **Live text in the web demo**, over Gradium's WebSocket with short-lived
   tokens, for visitors on their own key.
+- **A real clean-up pass in the web demo**: today's tidy-up is rules (ums,
+  doubled words, capitals); rephrasing and formatting need a language model.
 
 ## The mark
 

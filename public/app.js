@@ -1,5 +1,7 @@
 // gradium-dictation, the web demo: record a clip, send it, read the words
 // as they come back. Nothing is kept: no storage, no cookies.
+import { cloud } from './cloud.js';
+import { tidy, wordCount } from './tidy.js';
 
 const CLIP_SECONDS = 30;
 const RATE = 16_000;
@@ -16,6 +18,10 @@ const text = $('text');
 const status = $('status');
 const lang = $('lang');
 const keyField = $('key');
+const tidyOn = $('tidy-on');
+const dots = cloud($('cloud'));
+/** What an average typist manages: Dhakal et al., CHI 2018, 168,000 volunteers. */
+const TYPING_WPM = 52;
 
 /** 'idle' | 'starting' | 'recording' | 'sending' */
 let state = 'idle';
@@ -56,6 +62,7 @@ function hear(batch) {
   const level = Math.max(0, Math.min(DOTS, Math.round(((20 * Math.log10(loud + 1e-7) + 50) / 38) * DOTS)));
   levels = [...levels.slice(1), level];
   drawMeter();
+  dots.hear(level / DOTS);
 }
 drawMeter();
 
@@ -77,11 +84,8 @@ async function allowance() {
   if (keyField.value.trim()) return say('Using your own Gradium key. The shared limit does not apply.');
   try {
     const answer = await (await fetch('/api/status', { cache: 'no-store' })).json();
-    if (!answer.shared) {
-      document.querySelector('.own').open = true;
-      return say('The shared demo key is not set up yet. Paste your own Gradium key below to try it.', true);
-    }
-    if (answer.remainingSeconds < 1) return say('Demo paused for today. Paste your own Gradium key below, or come back tomorrow.', true);
+    if (!answer.shared) return say('The shared demo key is not set up yet. Paste your own Gradium key further down to try it.', true);
+    if (answer.remainingSeconds < 1) return say('Demo paused for today. Paste your own Gradium key further down, or come back tomorrow.', true);
     const minutes = Math.floor(answer.remainingSeconds / 60);
     say(`Shared demo: ${minutes >= 1 ? `${minutes} min` : `${Math.floor(answer.remainingSeconds)} s`} of today’s ${Math.round(answer.dailySeconds / 60)} left for everyone.`);
   } catch {
@@ -243,14 +247,45 @@ async function send(clip, seconds, released) {
       line.remove();
       return say('No words were heard in that clip. Try again, a little closer to the microphone.', true);
     }
-    line.textContent = said[0].toUpperCase() + said.slice(1);
+    line.dataset.heard = said;
+    line.dataset.language = lang.value;
+    write(line);
+    const words = wordCount(said);
     const ms = Math.round(performance.now() - released);
-    say(`${seconds.toFixed(1)} s of speech · text ${(ms / 1000).toFixed(1)} s after you stopped`);
-    setTimeout(() => state === 'idle' && allowance(), 6000);
+    say(`${words} words in ${seconds.toFixed(1)} s of speech · text ${(ms / 1000).toFixed(1)} s after you stopped`);
+    pace(words, seconds);
+    setTimeout(() => state === 'idle' && allowance(), 8000);
   } catch {
     line.remove();
     say('The demo could not be reached. Check the connection and try again.', true);
   }
+}
+
+/* ---------- tidying, and how fast that was ---------- */
+
+/** Draw a clip's line: tidied or as it was heard, with what the tidy-up took out. */
+function write(line) {
+  const heard = line.dataset.heard;
+  const tidied = tidy(heard, line.dataset.language);
+  const text = tidyOn.checked && tidied.text ? tidied.text : heard;
+  const took = [tidied.fillers && `${tidied.fillers} ${tidied.fillers === 1 ? 'um' : 'ums'}`, tidied.repeats && `${tidied.repeats} doubled ${tidied.repeats === 1 ? 'word' : 'words'}`].filter(Boolean);
+  line.replaceChildren(text);
+  if (took.length) {
+    const note = document.createElement('span');
+    note.className = 'took';
+    note.textContent = tidyOn.checked ? `Tidied: ${took.join(' and ')} taken out` : `As heard: ${took.join(' and ')} left in`;
+    line.append(note);
+  }
+}
+
+/** The visitor's own words a minute, against the average typist's, once a clip is long enough to say. */
+function pace(words, seconds) {
+  if (seconds < 3 || words < 6) return;
+  const wpm = Math.round((words / seconds) * 60);
+  $('pace').textContent = String(wpm);
+  $('pace-label').textContent = 'You, just now';
+  $('times').textContent = (wpm / TYPING_WPM).toFixed(1);
+  $('times-label').textContent = wpm >= TYPING_WPM ? 'Faster than typing it' : 'Of a typist’s pace';
 }
 
 /* ---------- the button ---------- */
@@ -285,7 +320,7 @@ talk.addEventListener('keydown', (event) => {
 });
 
 $('copy').addEventListener('click', async () => {
-  const all = [...text.querySelectorAll('p:not(.hint)')].map((p) => p.textContent).join('\n\n');
+  const all = [...text.querySelectorAll('p:not(.hint)')].map((p) => p.firstChild?.textContent ?? '').join('\n\n');
   if (!all) return say('Nothing to copy yet.');
   try {
     await navigator.clipboard.writeText(all);
@@ -300,6 +335,20 @@ $('clear').addEventListener('click', () => {
   allowance();
 });
 keyField.addEventListener('change', allowance);
+tidyOn.addEventListener('change', () => text.querySelectorAll('p[data-heard]').forEach(write));
+
+// Space, held anywhere on the page that is not a field or a button, is the button.
+const typing = (target) => target instanceof HTMLElement && Boolean(target.closest('input, select, textarea, button, a, summary, [contenteditable]'));
+addEventListener('keydown', (event) => {
+  if (event.code !== 'Space' || event.repeat || typing(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+  event.preventDefault();
+  if (state === 'recording' && latched) return void finish();
+  begin();
+});
+addEventListener('keyup', (event) => {
+  if (event.code !== 'Space' || typing(event.target)) return;
+  release();
+});
 
 show();
 allowance();
