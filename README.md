@@ -42,17 +42,29 @@ Vercel deploys as they are on every push to `main`.
 
 <img src="docs/desktop-rest.jpg" alt="The demo page: a headline, a notes window and a hold-to-talk button" width="720">
 
-- **What it does:** hold the button (or the space bar), speak, let go. The
-  text arrives, the tidy-up takes out ums and doubled words (rules, not a
-  rewrite; one switch shows exactly what was heard), and the page works out
-  your words a minute against the average typist's 52.
+- **What it does:** hold the button (or the space bar) and speak. The words
+  appear while you are still talking, about half a second behind your voice,
+  and settle as Gradium finalizes them. Let go, and the tidy-up takes out ums
+  and doubled words (rules, not a rewrite; one switch shows exactly what was
+  heard). The page shows its own latency, and your words a minute against
+  the average typist's 52.
+- **How the live part works:** the page holds a WebSocket to `/api/live`, a
+  Vercel function that relays it to Gradium's streaming speech-to-text
+  (`wss://api.gradium.ai/api/speech/asr`, `delay_in_frames: 7`) with the key
+  in a header. A relay, not a token in the browser, because a token's socket
+  can stay open for many minutes and is billed by the second: here the server
+  counts the audio, ends a press at 30 seconds and charges the day's
+  allowance for what was sent. Measured from San Francisco through the Paris
+  function: first words about 1.5 s after speech begins, last words about
+  0.4 s after release.
 - **Run it here:** `GRADIUM_API_KEY=gd_... node dev.mjs`, then open
   http://127.0.0.1:4173. Leave the key out and paste one into the page instead.
   `node --test` runs its tests.
-- **The key stays on the server.** The page records a clip of up to 30 seconds
-  as 16 kHz WAV and posts it to `/api/transcribe`, which calls Gradium's REST
-  speech-to-text and streams the words back. A visitor can paste their own
-  key instead: it is passed to Gradium for that request and kept nowhere.
+- **The key stays on the server.** Where no live socket can be had, the page
+  falls back to recording the clip as 16 kHz WAV and posting it to
+  `/api/transcribe`, which calls Gradium's REST speech-to-text. Either way a
+  visitor can paste their own key instead: it is passed to Gradium for that
+  press and kept nowhere.
 - **What the shared key can spend.** Gradium bills speech-to-text at 3 credits
   a second. The shared key gives everybody together 30 minutes a day (5,400
   credits: about 29 cents at the XS plan's own rate, 38 cents at its top-up
@@ -111,8 +123,8 @@ latency.
 - **A menu bar app**, with a sound and a level meter while recording, and a
   signed macOS build.
 - **Streaming insert**, typing text live as it arrives.
-- **Live text in the web demo**, over Gradium's WebSocket with short-lived
-  tokens, for visitors on their own key.
+- **Webhooks** for usage and session events, and hands-free mode in the web
+  demo from Gradium's voice-activity signal.
 - **A real clean-up pass in the web demo**: today's tidy-up is rules (ums,
   doubled words, capitals); rephrasing and formatting need a language model.
 
