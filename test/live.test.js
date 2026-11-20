@@ -62,7 +62,7 @@ test('a press is set up at the lowest delay, relayed word by word, and ended on 
   assert.equal(types(gradium).filter((t) => t === 'audio').length, 2, 'nothing is sent after release');
   gradium.emit('message', JSON.stringify({ type: 'flushed', flush_id: 1 }));
   gradium.emit('message', JSON.stringify({ type: 'end_of_stream' }));
-  assert.deepEqual(client.sent.slice(-2), [{ type: 'flushed' }, { type: 'done', seconds: 3, why: 'released' }]);
+  assert.deepEqual(client.sent.slice(-2), [{ type: 'flushed', final: true }, { type: 'done', seconds: 3, why: 'released' }]);
   assert.equal(client.closed, 1000);
   await settle();
   // Held for a whole clip, charged for the three seconds it sent.
@@ -197,4 +197,28 @@ test('only the demo’s own page may open a live socket', () => {
   assert.equal(ask({ origin: 'https://elsewhere.example' }).refuse, 'elsewhere');
   assert.equal(ask({}).refuse, 'elsewhere', 'no origin is not the page');
   assert.equal(ask({ origin: 'https://demo.example' }, '?lang=xx').refuse, 'language');
+});
+
+test('a pause mid-press asks Gradium for the words it is holding, and the press goes on', async () => {
+  let at = 0;
+  const { client, gradium } = press({ clock: () => at });
+  client.emit('message', JSON.stringify({ type: 'start' }), false);
+  await settle();
+  gradium.emit('open');
+  gradium.emit('message', JSON.stringify({ type: 'ready', delay_in_frames: 7 }));
+  client.emit('message', second(), true);
+  at = 5_000;
+  client.emit('message', JSON.stringify({ type: 'pause' }), false);
+  assert.deepEqual(gradium.sent.at(-1), { type: 'flush', flush_id: 2 }, 'a flush of its own number, and no end of stream');
+  // Told again at once: one flush is enough for one breath.
+  client.emit('message', JSON.stringify({ type: 'pause' }), false);
+  assert.equal(types(gradium).filter((t) => t === 'flush').length, 1);
+  gradium.emit('message', JSON.stringify({ type: 'flushed', flush_id: 2 }));
+  assert.deepEqual(client.sent.at(-1), { type: 'flushed', final: false });
+  assert.equal(client.closed, null, 'the press is still open');
+  client.emit('message', second(), true);
+  assert.equal(types(gradium).filter((t) => t === 'audio').length, 2, 'audio goes on after the pause');
+  at = 9_000;
+  client.emit('message', JSON.stringify({ type: 'flush' }), false);
+  assert.deepEqual(gradium.sent.slice(-2), [{ type: 'flush', flush_id: 1 }, { type: 'end_of_stream' }]);
 });
