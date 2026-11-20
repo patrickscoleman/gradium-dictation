@@ -13,6 +13,9 @@ import { WebSocket, WebSocketServer } from 'ws';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const headers = JSON.parse(await readFile(join(here, 'vercel.json'), 'utf8')).headers[0].headers;
+// To try the page framed by another local page (the deck's slide does this in production from app.alloglot.com):
+// DEV_FRAMED_BY=http://127.0.0.1:4400 node dev.mjs
+if (process.env.DEV_FRAMED_BY) for (const header of headers) if (header.key === 'Content-Security-Policy') header.value = header.value.replace("frame-ancestors 'self'", `frame-ancestors 'self' ${process.env.DEV_FRAMED_BY}`);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8' };
 const cache = memoryCache();
 const port = Number(process.env.PORT ?? 4173);
