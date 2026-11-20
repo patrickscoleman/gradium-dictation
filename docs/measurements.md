@@ -33,3 +33,5 @@ What the numbers say:
 Not possible from here: a US region. Gradium answers from Europe, so a
 speaker in the US is about 0.15 s further away each way than one in Paris,
 wherever the relay runs.
+
+The deck frames this page on its demo slide: `?embed=1` is the stage alone, and only app.alloglot.com may frame it.
