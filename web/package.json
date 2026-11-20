@@ -1,0 +1,14 @@
+{
+  "name": "gradium-dictation-web",
+  "private": true,
+  "type": "module",
+  "description": "The web demo of gradium-dictation: hold to talk, read the text. Static page and two small functions.",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@vercel/functions": "3.11.3"
+  }
+}

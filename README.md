@@ -32,6 +32,38 @@ terminal (or the installed app) under System Settings › Privacy & Security ›
 Languages: English, French, German, Spanish and Portuguese, the five Gradium
 speech-to-text supports.
 
+## Web demo
+
+`web/` is the same idea in a browser, for trying it without installing
+anything: press the button, speak, and read the text. It is a static page
+and two small functions, made to deploy on Vercel with `web` as the project's
+root directory.
+
+- **Run it here:** `cd web && GRADIUM_API_KEY=gd_... node dev.mjs`, then open
+  http://127.0.0.1:4173. Leave the key out and paste one into the page instead.
+  `node --test` runs its tests.
+- **The key stays on the server.** The page records a clip of up to 30 seconds
+  as 16 kHz WAV and posts it to `/api/transcribe`, which calls Gradium's REST
+  speech-to-text and streams the words back. A visitor can paste their own
+  key instead: it is passed to Gradium for that request and kept nowhere.
+- **What the shared key can spend.** Gradium bills speech-to-text at 3 credits
+  a second. The shared key gives everybody together 30 minutes a day (5,400
+  credits: about 29 cents at the XS plan's own rate, 38 cents at its top-up
+  rate), one address 5 minutes a day and 8 clips in 10 minutes. Past that
+  the page says "Demo paused for today". It also stops whenever the account
+  has fewer than 120,000 credits left, by Gradium's own count, so a lost
+  counter cannot run the account down. The numbers are in `web/lib/config.js`.
+- **Where the counts live:** Vercel's Runtime Cache, in the one region the
+  functions run in (Paris). Nothing to set up. An address is kept only as a
+  hash salted with the day.
+- **What it keeps:** no audio, no text, no cookies. Every page is `noindex`.
+
+To deploy: import this repository in Vercel, set Root Directory to `web`,
+and add `GRADIUM_API_KEY` as a Production environment variable. Without the
+key the page still works for anyone who pastes their own.
+
+This is a demo by Patrick Coleman, not a Gradium product.
+
 ## How it works
 
 ```
@@ -69,6 +101,8 @@ latency.
 - **A menu bar app**, with a sound and a level meter while recording, and a
   signed macOS build.
 - **Streaming insert**, typing text live as it arrives.
+- **Live text in the web demo**, over Gradium's WebSocket with short-lived
+  tokens, for visitors on their own key.
 
 ## The mark
 
