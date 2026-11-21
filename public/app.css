@@ -93,6 +93,10 @@ html.listening .stage { border-color: rgb(218 255 82 / 45%); box-shadow: 0 40px 
 .talk[aria-pressed='true'] .lamp { background: var(--neon); animation: blink 1.2s ease-in-out infinite; }
 .talk-label { font-family: var(--mono); font-weight: 500; font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--neon); white-space: nowrap; }
 .talk[disabled] .talk-label { color: var(--soft); }
+.talk-key { font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; color: var(--gray); white-space: nowrap; }
+.talk-key kbd { font-size: 11.5px; color: var(--text); margin-left: 2px; }
+.talk[aria-pressed="true"] .talk-key, .talk[disabled] .talk-key { visibility: hidden; }
+@media (hover: none), (pointer: coarse) { .talk-key { display: none; } }
 .clock { margin-left: auto; font-family: var(--mono); font-size: 15px; color: var(--gray); }
 .meter { display: flex; align-items: center; gap: 5px; height: 44px; }
 .meter span { display: flex; flex-direction: column; justify-content: center; gap: 4px; }

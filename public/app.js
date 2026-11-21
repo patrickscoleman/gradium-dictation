@@ -608,13 +608,16 @@ tidyOn.addEventListener('change', () => text.querySelectorAll('p[data-heard]').f
 // Space, held anywhere on the page that is not a field or a button, is the button.
 const typing = (target) => target instanceof HTMLElement && Boolean(target.closest('input, select, textarea, button, a, summary, [contenteditable]'));
 addEventListener('keydown', (event) => {
-  if (event.code !== 'Space' || event.repeat || typing(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+  if (event.code !== 'Space' || typing(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+  // Every Space that is ours stops the page scrolling, the held key's repeats included.
   event.preventDefault();
+  if (event.repeat) return;
   if (state === 'recording' && latched) return void finish();
   begin();
 });
 addEventListener('keyup', (event) => {
   if (event.code !== 'Space' || typing(event.target)) return;
+  event.preventDefault();
   release();
 });
 
