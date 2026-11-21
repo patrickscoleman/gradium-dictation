@@ -30,6 +30,29 @@ What the numbers say:
   behind the voice the words are landing (from Gradium's start time for each
   word), and last word after release. `window.lastPress` has every step.
 
+## Second pass, 2026-11-21 (398ec08)
+
+Three more changes: the microphone stays open for two minutes after a press,
+so the next one starts at once and begins with the 300 ms before it; a pause
+mid-press (260 ms without a voice) asks Gradium to flush without ending the
+stream; and the microphone is opened without echo cancelling. Same script,
+same route, two or three runs a row.
+
+| | Before (864060e) | After (398ec08) |
+|---|---|---|
+| Last word before a pause, after the pause begins | 1,060 to 1,079 ms | 813 to 820 ms |
+| First words, after speech begins | 1,634 to 1,638 ms | 1,629 to 1,658 ms |
+| Last words, after release | 552 to 646 ms | 558 to 592 ms |
+| Relay to Gradium: connect, set up | 34 to 55 ms, 17 to 39 ms | 21 to 25 ms, 10 to 41 ms |
+
+- **Only the pause moved**, by about a quarter of a second: each phrase now
+  lands as it is finished instead of waiting out Gradium's delay. The flush
+  does not shift later words (their `start_s` is the same with and without).
+- First words cannot move from here: saying them, Gradium's lowest delay,
+  and the Atlantic. In Paris expect about 1.25 s, an estimate.
+- Not measured: the effect of no echo cancelling, which needs a real
+  microphone, and anything on a phone.
+
 Not possible from here: a US region. Gradium answers from Europe, so a
 speaker in the US is about 0.15 s further away each way than one in Paris,
 wherever the relay runs.

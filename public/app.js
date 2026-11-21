@@ -171,7 +171,7 @@ async function allowance() {
 
 function microphoneProblem(error) {
   if (!navigator.mediaDevices?.getUserMedia) return 'This browser cannot record here. Try a current Safari, Chrome or Firefox.';
-  if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError') return 'The microphone is blocked for this page. Allow it in the browser’s site settings, then press again.';
+  if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError') return 'The microphone was not allowed. Press again and choose Allow. If the browser does not ask, allow it for this page in its site settings.';
   if (error?.name === 'NotFoundError') return 'No microphone was found.';
   if (error?.name === 'AsleepError') return 'The browser would not start audio. Tap the button once more.';
   return 'The microphone could not be started. Press again to retry.';
