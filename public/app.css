@@ -152,6 +152,8 @@ h3 { font-family: var(--head); font-weight: 500; font-size: 24px; letter-spacing
 .card input::placeholder { color: var(--dim); }
 
 footer { margin-top: clamp(64px, 10vw, 120px); padding: 26px 20px max(34px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); text-align: center; }
+.source-link { min-height: 44px; margin-top: 16px; gap: 8px; }
+.source-link:focus-visible { border-radius: 10px; }
 
 @media (max-width: 760px) {
   .nav nav { display: none; }
