@@ -53,6 +53,13 @@ same route, two or three runs a row.
 - Not measured: the effect of no echo cancelling, which needs a real
   microphone, and anything on a phone.
 
-Not possible from here: a US region. Gradium answers from Europe, so a
-speaker in the US is about 0.15 s further away each way than one in Paris,
-wherever the relay runs.
+These runs used the Paris relay. [Gradium's residency guide](https://docs.gradium.ai/guides/data-residency)
+documents US inference clusters on both coasts and nearest-cluster routing
+for the default API endpoint. A US relay could use the US inference path.
+
+On 2026-11-22, five paired curl samples from Paris through a Tailscale exit
+node in San Jose gave median TCP connect times of 147 ms to Google and
+166 ms to `api.gradium.ai`, with DNS time excluded. The difference suggests
+about 20 ms from San Jose to Gradium's US endpoint, which resolved to
+52.32.153.236 (AWS us-west-2, Oregon). This estimates network transit only.
+Press-to-transcript timing with a US relay remains unmeasured.
