@@ -222,3 +222,29 @@ test('a pause mid-press asks Gradium for the words it is holding, and the press 
   client.emit('message', JSON.stringify({ type: 'flush' }), false);
   assert.deepEqual(gradium.sent.slice(-2), [{ type: 'flush', flush_id: 1 }, { type: 'end_of_stream' }]);
 });
+
+test('the configured shared key is disabled for French live warmup and dictation', async (t) => {
+  const previous = process.env.GRADIUM_API_KEY;
+  process.env.GRADIUM_API_KEY = SHARED;
+  t.after(() => {
+    if (previous === undefined) delete process.env.GRADIUM_API_KEY;
+    else process.env.GRADIUM_API_KEY = previous;
+  });
+
+  const { client, used } = press({ sharedKey: undefined });
+  client.emit('message', JSON.stringify({ type: 'warm', lang: 'fr' }), false);
+  await settle();
+  client.emit('message', JSON.stringify({ type: 'start', lang: 'fr' }), false);
+  await settle();
+  assert.deepEqual(used, []);
+  assert.equal(client.sent[0].error, 'no_key');
+  assert.match(client.sent[0].message, /Paste your own Gradium key/);
+
+  const own = press({ sharedKey: undefined });
+  own.client.emit('message', JSON.stringify({ type: 'start', lang: 'fr', key: OWN }), false);
+  await settle();
+  assert.deepEqual(own.used, [OWN]);
+  own.gradium.emit('open');
+  assert.equal(own.gradium.sent[0].json_config.language, 'fr');
+  own.client.close();
+});

@@ -148,3 +148,33 @@ test('a key Gradium refuses is said plainly, and the key is in no message', asyn
     console.error = error;
   }
 });
+
+test('the configured shared key is disabled for status and French clips', async (t) => {
+  const previous = process.env.GRADIUM_API_KEY;
+  process.env.GRADIUM_API_KEY = SHARED;
+  t.after(() => {
+    if (previous === undefined) delete process.env.GRADIUM_API_KEY;
+    else process.env.GRADIUM_API_KEY = previous;
+  });
+  const options = {
+    cache: memoryCache(),
+    floor: async () => assert.fail('the shared credit balance must not be read'),
+    send: async ({ key, language }) => {
+      assert.equal(key, OWN);
+      assert.equal(language, 'fr');
+      return new Response('bonjour').body;
+    },
+  };
+  const status = await handleStatus(new Request('https://demo.example/api/status'), options);
+  const { shared, remainingSeconds } = await status.json();
+  assert.equal(shared, false);
+  assert.equal(remainingSeconds, 0);
+  const refused = await handleTranscribe(post(clip(1), { lang: 'fr' }), options);
+  assert.equal(refused.status, 503);
+  const refusal = await refused.json();
+  assert.equal(refusal.error, 'no_key');
+  assert.match(refusal.message, /Paste your own Gradium key/);
+  const own = await handleTranscribe(post(clip(1), { lang: 'fr', key: OWN }), options);
+  assert.equal(own.headers.get('x-key'), 'own');
+  assert.equal(await own.text(), 'bonjour');
+});

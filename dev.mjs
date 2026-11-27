@@ -1,7 +1,6 @@
 // The demo on this machine, without Vercel: the page from public/, the two
 // functions from lib/, the headers from vercel.json, and a Map for the
-// counts. `GRADIUM_API_KEY=... node dev.mjs`, or leave the key out and paste
-// one into the page.
+// counts. Run `node dev.mjs` and paste your Gradium key into the page.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';

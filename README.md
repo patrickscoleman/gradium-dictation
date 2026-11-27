@@ -53,36 +53,23 @@ Vercel deploys as they are on every push to `main`.
   (`wss://api.gradium.ai/api/speech/asr`, `delay_in_frames: 7`) with the key
   in a header. A relay, not a token in the browser, because a token's socket
   can stay open for many minutes and is billed by the second: here the server
-  counts the audio, ends a press at 30 seconds and charges the day's
-  allowance for what was sent. Measured from San Francisco through the Paris
+  counts the audio and ends a press at 30 seconds. Measured from San Francisco through the Paris
   function: first words about 1.5 s after speech begins, last words about
   0.4 s after release.
-- **Run it here:** `GRADIUM_API_KEY=gd_... node dev.mjs`, then open
-  http://127.0.0.1:4173. Leave the key out and paste one into the page instead.
-  `node --test` runs its tests.
-- **The key stays on the server.** Where no live socket can be had, the page
-  falls back to recording the clip as 16 kHz WAV and posting it to
-  `/api/transcribe`, which calls Gradium's REST speech-to-text. Either way a
-  visitor can paste their own key instead: it is passed to Gradium for that
-  press and kept nowhere.
-- **What the shared key can spend.** Gradium bills speech-to-text at 3 credits
-  a second. The shared key gives everybody together 4 hours a day (43,200
-  credits: about $2.30 at the XS plan's own rate, $3.02 at its top-up
-  rate), and one address 80 minutes a day and 100 clips in 10 minutes. These
-  were raised from 30 minutes on 2026-11-20 because the link is not public and
-  the interview must not hit a limit in normal use. Past that
-  the page says "Demo paused for today". It also stops whenever the account
-  has fewer than 120,000 credits left, by Gradium's own count, so a lost
-  counter cannot run the account down. The numbers are in `lib/config.js`.
+- **Run it here:** run `node dev.mjs`, open http://127.0.0.1:4173 and
+  paste your Gradium key into the page. `node --test` runs the tests.
+- **Bring your own key.** The web demo's shared key is disabled in
+  `lib/config.js`. Both live dictation and the 16 kHz WAV fallback at
+  `/api/transcribe` require a visitor's Gradium key. The key is sent to
+  Gradium for that press and kept nowhere.
 - **Where the counts live:** Vercel's Runtime Cache, in the one region the
   functions run in (Paris). Nothing to set up. An address is kept only as a
   hash salted with the day.
 - **What it keeps:** no audio, no text, no cookies. Every page is `noindex`.
 
-To deploy: import this repository in Vercel with its default settings and
-add `GRADIUM_API_KEY` as a Production environment variable (`vercel.json`
-says the rest). Without the key the page still works for anyone who pastes
-their own.
+To deploy the web demo, import this repository into Vercel with its default
+settings. Visitors supply their own Gradium key even if the deployment has
+`GRADIUM_API_KEY` configured.
 
 This is a demo by Patrick Coleman, not a Gradium product.
 
